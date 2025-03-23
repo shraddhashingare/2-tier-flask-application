@@ -1,42 +1,61 @@
-from flask import Flask, render_template, request, redirect
+from flask import Flask, render_template, request, jsonify
 import mysql.connector
 
 app = Flask(__name__)
 
-# Connect to the MySQL Database
-def get_db_connection():
-    return mysql.connector.connect(
-        host="your_mysql_host",  # e.g., "localhost"
-        user="your_mysql_user",  # e.g., "root"
-        password="your_mysql_password",  # your MySQL password
-        database="your_database"  # name of the database
-    )
+# Database Configuration
+config = {
+    "host": "localhost",  # Change if your MySQL server is hosted elsewhere
+    "user": "your_username",
+    "password": "your_password",
+    "database": "your_database"
+}
 
-# Route to display the messages and the form
-@app.route("/", methods=["GET", "POST"])
+def get_db_connection():
+    return mysql.connector.connect(**config)
+
+@app.route('/')
 def index():
-    # Connect to the database
+    return render_template('index.html')
+
+@app.route('/add_message', methods=['POST'])
+def add_message():
+    data = request.json
+    message = data.get("message")
+    
+    if not message:
+        return jsonify({"error": "Message cannot be empty"}), 400
+    
     conn = get_db_connection()
     cursor = conn.cursor()
-
-    # Handle the form submission
-    if request.method == "POST":
-        message = request.form['message']
-        
-        # Insert the new message into the database
-        cursor.execute("INSERT INTO messages (message) VALUES (%s)", (message,))
-        conn.commit()
-        return redirect("/")
-
-    # Retrieve all messages from the database
-    cursor.execute("SELECT * FROM messages")
-    messages = cursor.fetchall()
-
-    # Close the database connection
+    cursor.execute("INSERT INTO messages (content) VALUES (%s)", (message,))
+    conn.commit()
     cursor.close()
     conn.close()
+    
+    return jsonify({"message": message})
 
-    return render_template("index.html", messages=messages)
+@app.route('/get_messages', methods=['GET'])
+def get_messages():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, content FROM messages")
+    messages = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    
+    return jsonify([{"id": msg[0], "content": msg[1]} for msg in messages])
 
-if __name__ == "__main__":
+@app.route('/delete_message/<int:msg_id>', methods=['DELETE'])
+def delete_message(msg_id):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM messages WHERE id = %s", (msg_id,))
+    conn.commit()
+    cursor.close()
+    conn.close()
+    
+    return jsonify({"message": "Deleted successfully"})
+
+if __name__ == '__main__':
     app.run(debug=True)
