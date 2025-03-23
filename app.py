@@ -1,48 +1,42 @@
-import os
-from flask import Flask, render_template, request, redirect, url_for, jsonify
-from flask_mysqldb import MySQL
+from flask import Flask, render_template, request, redirect
+import mysql.connector
 
 app = Flask(__name__)
 
-# Configure MySQL from environment variables
-app.config['MYSQL_HOST'] = os.environ.get('MYSQL_HOST', 'localhost')
-app.config['MYSQL_USER'] = os.environ.get('MYSQL_USER', 'default_user')
-app.config['MYSQL_PASSWORD'] = os.environ.get('MYSQL_PASSWORD', 'default_password')
-app.config['MYSQL_DB'] = os.environ.get('MYSQL_DB', 'default_db')
+# Connect to the MySQL Database
+def get_db_connection():
+    return mysql.connector.connect(
+        host="your_mysql_host",  # e.g., "localhost"
+        user="your_mysql_user",  # e.g., "root"
+        password="your_mysql_password",  # your MySQL password
+        database="your_database"  # name of the database
+    )
 
-# Initialize MySQL
-mysql = MySQL(app)
+# Route to display the messages and the form
+@app.route("/", methods=["GET", "POST"])
+def index():
+    # Connect to the database
+    conn = get_db_connection()
+    cursor = conn.cursor()
 
-def init_db():
-    with app.app_context():
-        cur = mysql.connection.cursor()
-        cur.execute('''
-        CREATE TABLE IF NOT EXISTS messages (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            message TEXT
-        );
-        ''')
-        mysql.connection.commit()  
-        cur.close()
+    # Handle the form submission
+    if request.method == "POST":
+        message = request.form['message']
+        
+        # Insert the new message into the database
+        cursor.execute("INSERT INTO messages (message) VALUES (%s)", (message,))
+        conn.commit()
+        return redirect("/")
 
-@app.route('/')
-def hello():
-    cur = mysql.connection.cursor()
-    cur.execute('SELECT message FROM messages')
-    messages = cur.fetchall()
-    cur.close()
-    return render_template('index.html', messages=messages)
+    # Retrieve all messages from the database
+    cursor.execute("SELECT * FROM messages")
+    messages = cursor.fetchall()
 
-@app.route('/submit', methods=['POST'])
-def submit():
-    new_message = request.form.get('new_message')
-    cur = mysql.connection.cursor()
-    cur.execute('INSERT INTO messages (message) VALUES (%s)', [new_message])
-    mysql.connection.commit()
-    cur.close()
-    return jsonify({'message': new_message})
+    # Close the database connection
+    cursor.close()
+    conn.close()
 
-if __name__ == '__main__':
-    init_db()
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    return render_template("index.html", messages=messages)
 
+if __name__ == "__main__":
+    app.run(debug=True)
